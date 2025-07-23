@@ -8,73 +8,72 @@ app = Flask(__name__)
 
 RSS_URL = "https://www.romeoville.org/RSSFeed.aspx?ModID=58&CID=All-calendar.xml"
 
-HTML_TEMPLATE = """
-<!doctype html>
-<html lang="en">
+TEMPLATE = """
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8">
-  <title>Romeoville Events</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: sans-serif;
-      background: #f9f9f9;
-      color: #222;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
-    h1 {
-      text-align: center;
-      margin-top: 1rem;
-    }
-    .scroll-container {
-      height: 80vh;
-      width: 100%;
-      max-width: 800px;
-      overflow: hidden;
-      position: relative;
-    }
-    .scroll-content {
-      display: flex;
-      flex-direction: column;
-      animation: scrollUp linear infinite;
-    }
-    .event {
-      padding: 1rem;
-      text-align: center;
-      border-bottom: 1px solid #ddd;
-    }
-    @keyframes scrollUp {
-      0% { transform: translateY(100%); }
-      100% { transform: translateY(-100%); }
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Romeoville Upcoming Events</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+            overflow: hidden;
+        }
+        h1 {
+            background-color: #6a1b1a;
+            color: white;
+            padding: 20px;
+            margin: 0;
+        }
+        .scrolling-container {
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+        .event-list {
+            display: inline-block;
+            text-align: center;
+            animation: scroll-up linear infinite;
+            animation-duration: 40s;
+        }
+        .event {
+            padding: 20px 0;
+            font-size: 1.4em;
+            color: #333;
+        }
+        @keyframes scroll-up {
+            0% { transform: translateY(100%); }
+            100% { transform: translateY(-100%); }
+        }
+        @media (max-width: 768px) {
+            .event {
+                font-size: 1.1em;
+                padding: 15px 0;
+            }
+        }
+    </style>
 </head>
 <body>
-  <h1>Upcoming Romeoville Events</h1>
-  {% if events %}
-  <div class="scroll-container">
-    <div class="scroll-content" style="animation-duration: {{ duration }}s;">
-      {% for _ in range(2) %}  {# Loop twice to create smooth loop #}
-        {% for e in events %}
-          <div class="event">
-            <strong>{{ e.title }}</strong><br>
-            {{ e.date_str }}<br>
-            {{ e.time }}<br>
-            {{ e.location }}
-          </div>
-        {% endfor %}
-      {% endfor %}
+    <h1>Romeoville Upcoming Events</h1>
+    <div class="scrolling-container">
+        <div class="event-list">
+            {% for event in events %}
+                <div class="event">{{ event.date }} — {{ event.title }}</div>
+            {% endfor %}
+            <!-- Repeat events to ensure smooth loop -->
+            {% for event in events %}
+                <div class="event">{{ event.date }} — {{ event.title }}</div>
+            {% endfor %}
+        </div>
     </div>
-  </div>
-  {% else %}
-    <p>No upcoming events found.</p>
-  {% endif %}
 </body>
 </html>
 """
+
 
 def extract_event_date_and_time(desc_html):
     soup = BeautifulSoup(desc_html, "html.parser")
