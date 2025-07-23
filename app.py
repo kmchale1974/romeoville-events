@@ -6,32 +6,59 @@ import pytz
 
 app = Flask(__name__)
 
-FEED_URL = "https://www.romeoville.org/Calendar.aspx?RSS=1&CID=14"
+FEED_URL = "https://www.romeoville.org/RSSFeed.aspx?ModID=58&CID=All-calendar.xml"
 
 TEMPLATE = """
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Debug View - Romeoville Events</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Romeoville Events</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 2em; background: #fff; color: #333; }
-        h1 { color: #222; }
-        .event { margin-bottom: 1em; }
+        body {
+            background-color: #f4f4f4;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            width: 90%;
+            max-width: 800px;
+            overflow: hidden;
+            text-align: center;
+        }
+        .scrolling {
+            display: inline-block;
+            animation: scrollUp 30s linear infinite;
+        }
+        @keyframes scrollUp {
+            0% { transform: translateY(100%); }
+            100% { transform: translateY(-100%); }
+        }
+        .event {
+            margin: 2em 0;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
-    <h1>Parsed Events</h1>
-    {% if events %}
-        {% for event in events %}
-            <div class="event">
-                <strong>{{ event.title }}</strong><br>
-                Date: {{ event.date }}<br>
-            </div>
-        {% endfor %}
-    {% else %}
+    <div class="container">
+        {% if events %}
+        <div class="scrolling">
+            {% for event in events %}
+            <div class="event">{{ event }}</div>
+            {% endfor %}
+        </div>
+        {% else %}
         <p>No upcoming events found.</p>
-    {% endif %}
+        {% endif %}
+    </div>
 </body>
 </html>
 """
@@ -42,36 +69,22 @@ def index():
     now = datetime.now(pytz.timezone("America/Chicago"))
     parsed_events = []
 
-       for entry in feed.entries:
-        print(f"\n--- ENTRY: {entry.title} ---")
-        print(entry.description)
-
+    for entry in feed.entries:
         soup = BeautifulSoup(entry.description, "html.parser")
         strong_tags = soup.find_all("strong")
         for tag in strong_tags:
             if "Event date" in tag.text:
                 text = tag.next_sibling
-                print(f"Raw sibling text: {text}")
-
                 if text:
                     date_str = text.strip().split(" - ")[0]
-                    print(f"Extracted date string: '{date_str}'")
-
                     try:
                         event_date = datetime.strptime(date_str, "%B %d, %Y")
                         event_date = pytz.timezone("America/Chicago").localize(event_date)
-                        print(f"Parsed date: {event_date}")
                         if event_date >= now:
-                            parsed_events.append({
-                                "title": entry.title,
-                                "date": event_date.strftime("%B %d, %Y")
-                            })
-                        else:
-                            print("Skipped: in the past")
+                            parsed_events.append(f"{event_date.strftime('%B %d, %Y')}: {entry.title}")
                     except Exception as e:
                         print(f"❌ Failed to parse '{entry.title}': {e}")
                 break
-
 
     return render_template_string(TEMPLATE, events=parsed_events)
 
