@@ -1,18 +1,20 @@
 from flask import Flask, render_template_string
 import feedparser
-import re
-from datetime import datetime, timedelta
 import pytz
+from datetime import datetime
+from bs4 import BeautifulSoup
+import re
 
 app = Flask(__name__)
 
 FEED_URL = "https://www.romeoville.org/Calendar.aspx?RSS=1&CID=14"
+
 TEMPLATE = """
 <!DOCTYPE html>
-<html lang=\"en\">
+<html lang="en">
 <head>
-    <meta charset=\"UTF-8\">
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Romeoville Events</title>
     <style>
         body {
@@ -20,45 +22,48 @@ TEMPLATE = """
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
+            overflow: hidden;
+        }
+        .container {
+            height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
         }
-        .container {
-            width: 90%;
-            max-width: 800px;
-            height: 100%;
+        .scrolling-events {
+            height: 80%;
             overflow: hidden;
             text-align: center;
             position: relative;
         }
-        .scrolling-wrapper {
-            display: flex;
-            flex-direction: column;
+        .scrolling-events ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
             animation: scrollUp 60s linear infinite;
         }
-        @keyframes scrollUp {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(-50%); }
+        .scrolling-events li {
+            font-size: 2em;
+            padding: 1em 0;
         }
-        .event {
-            margin: 2em 0;
-            font-size: 1.5em;
-            font-weight: bold;
+        @keyframes scrollUp {
+            0%   { transform: translateY(100%); }
+            100% { transform: translateY(-100%); }
         }
     </style>
 </head>
 <body>
-    <div class=\"container\">
+    <div class="container">
         {% if events %}
-        <div class=\"scrolling-wrapper\">
-            {% for event in events %}
-            <div class=\"event\">{{ event }}</div>
-            {% endfor %}
-            {% for event in events %}
-            <div class=\"event\">{{ event }}</div>
-            {% endfor %}
+        <div class="scrolling-events">
+            <ul>
+                {% for event in events %}
+                    <li>{{ event }}</li>
+                {% endfor %}
+                {% for event in events %}
+                    <li>{{ event }}</li>
+                {% endfor %}
+            </ul>
         </div>
         {% else %}
         <p>No upcoming events found.</p>
@@ -68,6 +73,15 @@ TEMPLATE = """
 </html>
 """
 
+def extract_event_date(description):
+    """Extract event date using regex."""
+    soup = BeautifulSoup(description, "html.parser")
+    text = soup.get_text()
+    match = re.search(r"Event date[s]?:\s*(.+)", text)
+    if match:
+        return match.group(1).strip()
+    return None
+
 @app.route("/")
 def index():
     feed = feedparser.parse(FEED_URL)
@@ -75,22 +89,21 @@ def index():
     upcoming_events = []
 
     for entry in feed.entries:
-        match = re.search(r"Event date[s]?:\\s*(.+?)<", entry.description)
-        if match:
-            date_str = match.group(1).split("<")[0].strip()
+        raw_date = extract_event_date(entry.description)
+        if raw_date:
             try:
-                # Parse date (single date or date range)
-                if "-" in date_str:
-                    start_str, _ = date_str.split("-")
-                    event_date = datetime.strptime(start_str.strip(), "%B %d, %Y")
+                if "-" in raw_date:
+                    start_str = raw_date.split("-")[0].strip()
                 else:
-                    event_date = datetime.strptime(date_str, "%B %d, %Y")
+                    start_str = raw_date.strip()
 
+                event_date = datetime.strptime(start_str, "%B %d, %Y")
                 event_date = pytz.timezone("America/Chicago").localize(event_date)
-                if event_date >= now:
+
+                if event_date.date() >= now.date():
                     upcoming_events.append(entry.title)
             except Exception as e:
-                print(f"Error parsing date from entry '{entry.title}': {e}")
+                print(f"Error parsing '{entry.title}': {e}")
 
     return render_template_string(TEMPLATE, events=upcoming_events)
 
