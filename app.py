@@ -87,11 +87,7 @@ HTML_TEMPLATE = """
 def parse_event_date(text):
     try:
         # Example: July 21, 2025
-        return datetime.datetime.strptime(text.strip(), "%B %d, %Y").date()
-    except Exception:
-        return None
-
-@app.route('/')
+      @app.route('/')
 def index():
     feed = feedparser.parse(FEED_URL)
     today = datetime.datetime.now(pytz.timezone("America/Chicago")).date()
@@ -128,13 +124,8 @@ def index():
 
     # Sort by date
     events.sort(key=lambda x: parse_event_date(x["date"]))
-   
-    print(f"Found {len(events)} events")
-for e in events:
-    print(e)
-
+    
     return render_template_string(HTML_TEMPLATE, events=events)
-
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
