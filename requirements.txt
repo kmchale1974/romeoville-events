@@ -1,4 +1,4 @@
-Flask
-feedparser
-beautifulsoup4
+Flask==3.1.1
+feedparser==6.0.11
+pytz==2025.2
 
