@@ -61,6 +61,9 @@ TEMPLATE = """
 </html>
 """
 
+from bs4 import BeautifulSoup
+import re
+
 @app.route("/")
 def index():
     feed = feedparser.parse(FEED_URL)
@@ -69,22 +72,22 @@ def index():
 
     for entry in feed.entries:
         try:
-            if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                event_date = datetime(*entry.published_parsed[:6], tzinfo=pytz.utc).astimezone(pytz.timezone("America/Chicago"))
-            else:
-                import re
-                match = re.search(r'Event date:\s*([A-Za-z]+ \d{1,2}, \d{4})', entry.description)
-                if match:
-                    event_date = datetime.strptime(match.group(1), '%B %d, %Y')
-                    event_date = pytz.timezone("America/Chicago").localize(event_date)
-                else:
-                    continue  # Skip if no date found
-            if event_date >= now:
-                upcoming_events.append(entry.title)
+            soup = BeautifulSoup(entry.description, "html.parser")
+            text = soup.get_text()
+
+            # Look for the line that contains the event date
+            match = re.search(r'Event date:\s*([A-Za-z]+ \d{1,2}, \d{4})', text)
+            if match:
+                event_date = datetime.strptime(match.group(1), "%B %d, %Y")
+                event_date = pytz.timezone("America/Chicago").localize(event_date)
+
+                if event_date >= now:
+                    upcoming_events.append(entry.title)
         except Exception as e:
             print(f"Error parsing entry: {e}")
 
     return render_template_string(TEMPLATE, events=upcoming_events)
+
 
 
 if __name__ == "__main__":
