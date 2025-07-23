@@ -12,15 +12,16 @@ HTML_TEMPLATE = """
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Romeoville Upcoming Events</title>
+  <title>Romeoville Events</title>
   <style>
     body { font-family: Arial, sans-serif; background: #002856; color: white; margin:0; padding:0; overflow:hidden; }
     h1 { text-align:center; background:#0066a1; padding:20px; margin:0; font-size:2em; }
     .scroll-container { height:90vh; overflow:hidden; position:relative; }
     .events { animation: scroll-up 30s linear infinite; padding:20px; }
-    .event { margin-bottom: 30px; border-bottom: 1px solid #ccc; padding-bottom:10px; }
-    .title { font-size:1.5em; color:#ffc72c; }
-    .datetime { font-size:1.1em; color:#ddd; }
+    .event { margin-bottom: 40px; border-bottom: 1px solid #ccc; padding-bottom:10px; }
+    .title a { font-size:1.4em; color:#ffc72c; text-decoration:none; }
+    .desc { font-size:1.1em; color:#ddd; margin-top:5px; }
+    .datetime { font-size:0.95em; color:#aaa; margin-top:5px; }
     @keyframes scroll-up { 0% { transform: translateY(100%); } 100% { transform: translateY(-100%); } }
   </style>
 </head>
@@ -30,8 +31,9 @@ HTML_TEMPLATE = """
     <div class="events">
       {% for e in events %}
         <div class="event">
-          <div class="title">{{ e.title }}</div>
-          <div class="datetime">{{ e.date }} — {{ e.time }}</div>
+          <div class="title"><a href="{{ e.link }}" target="_blank">{{ e.title }}</a></div>
+          <div class="desc">{{ e.description }}</div>
+          <div class="datetime">{{ e.date }}</div>
         </div>
       {% endfor %}
       {% if not events %}
@@ -50,7 +52,6 @@ def index():
     events = []
 
     for entry in feed.entries:
-        # feedparser extracts date info automatically
         dt = None
         if hasattr(entry, "published_parsed"):
             dt = datetime(*entry.published_parsed[:6])
@@ -58,12 +59,14 @@ def index():
             dt = datetime(*entry.updated_parsed[:6])
 
         if dt and dt >= now:
-            date_str = dt.strftime("%B %d, %Y")
-            time_str = dt.strftime("%I:%M %p").lstrip("0")
-            events.append({"title": entry.title, "date": date_str, "time": time_str})
+            events.append({
+                "title": entry.title,
+                "link": entry.link,
+                "description": entry.description if hasattr(entry, "description") else "",
+                "date": dt.strftime("%B %d, %Y %I:%M %p").lstrip("0")
+            })
 
-    # sort chronologically
-    events.sort(key=lambda e: datetime.strptime(e["date"] + " " + e["time"], "%B %d, %Y %I:%M %p"))
+    events.sort(key=lambda e: datetime.strptime(e["date"], "%B %d, %Y %I:%M %p"))
     return render_template_string(HTML_TEMPLATE, events=events)
 
 if __name__ == "__main__":
