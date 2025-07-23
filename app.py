@@ -56,7 +56,10 @@ TEMPLATE = """
         <div class="scroll">
             {% for event in events %}
             <div class="event {% if loop.index0 % 2 == 0 %}even{% endif %}">
-                {{ event }}
+                <strong>{{ event.title }}</strong><br/>
+                {{ event.date }}<br/>
+                {{ event.time }}<br/>
+                {{ event.location }}
             </div>
             {% endfor %}
         </div>
@@ -76,21 +79,32 @@ def index():
 
     for entry in feed.entries:
         try:
-            description = entry.get("description", "")
-            soup = BeautifulSoup(description, "html.parser")
-            text = soup.get_text()
+            soup = BeautifulSoup(entry.get("description", ""), "html.parser")
+            text = soup.get_text(separator="\n")
 
-            event_date = None
-            if "Event date:" in text:
-                parts = text.split("Event date:")[1].strip()
-                date_only = parts.split("Event Time")[0].strip()
-                date_only = date_only.split("\n")[0].split("  ")[0].strip()
-                event_date = datetime.strptime(date_only, "%B %d, %Y")
+            # Extract date, time, location
+            date = time = location = None
+            for line in text.splitlines():
+                if "Event date:" in line:
+                    date = line.replace("Event date:", "").strip()
+                elif "Event Time:" in line:
+                    time = line.replace("Event Time:", "").strip()
+                elif "Location:" in line:
+                    location = line.replace("Location:", "").strip()
+                elif location and line.strip():  # get additional lines after Location:
+                    location += ", " + line.strip()
+
+            # Check if date is valid and upcoming
+            if date:
+                event_date = datetime.strptime(date, "%B %d, %Y")
                 event_date = pytz.timezone("America/Chicago").localize(event_date)
-
-            if event_date and event_date >= now:
-                event_info = f"{entry.title} — {event_date.strftime('%B %d, %Y')}"
-                upcoming_events.append(event_info)
+                if event_date >= now:
+                    upcoming_events.append({
+                        "title": entry.title,
+                        "date": event_date.strftime("%B %d, %Y"),
+                        "time": time or "",
+                        "location": location or ""
+                    })
         except Exception as e:
             print(f"Error parsing entry '{entry}': {e}")
 
