@@ -7,7 +7,6 @@ from bs4 import BeautifulSoup
 app = Flask(__name__)
 
 FEED_URL = "https://www.romeoville.org/RSSFeed.aspx?ModID=58&CID=All-calendar.xml"
-
 TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -45,6 +44,10 @@ TEMPLATE = """
             font-size: 1.2em;
             padding: 1em;
         }
+        .even {
+            background-color: #e6f0ff;
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
@@ -52,7 +55,9 @@ TEMPLATE = """
         {% if events %}
         <div class="scroll">
             {% for event in events %}
-            <div class="event">{{ event }}</div>
+            <div class="event {% if loop.index0 % 2 == 0 %}even{% endif %}">
+                {{ event }}
+            </div>
             {% endfor %}
         </div>
         {% else %}
@@ -77,14 +82,14 @@ def index():
 
             event_date = None
             if "Event date:" in text:
-                parts = text.split("Event date:")[1].split("\n")[0].strip()
-                if " - " in parts:
-                    parts = parts.split(" - ")[0]
-                event_date = datetime.strptime(parts, "%B %d, %Y")
+                parts = text.split("Event date:")[1].strip()
+                date_only = parts.split("Event Time")[0].strip()
+                date_only = date_only.split("\n")[0].split("  ")[0].strip()
+                event_date = datetime.strptime(date_only, "%B %d, %Y")
                 event_date = pytz.timezone("America/Chicago").localize(event_date)
 
             if event_date and event_date >= now:
-                event_info = f"{entry.title} — {parts}"
+                event_info = f"{entry.title} — {event_date.strftime('%B %d, %Y')}"
                 upcoming_events.append(event_info)
         except Exception as e:
             print(f"Error parsing entry '{entry}': {e}")
