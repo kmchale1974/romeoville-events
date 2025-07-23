@@ -32,7 +32,7 @@ TEMPLATE = """
         }
         .scroll {
             display: inline-block;
-            animation: scrollUp 60s linear infinite;
+            animation: scrollUp 90s linear infinite;
         }
         @keyframes scrollUp {
             0%   { transform: translateY(100%); }
