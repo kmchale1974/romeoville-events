@@ -78,7 +78,7 @@ def is_future_event(date_str):
             event_date = datetime.strptime(date_str.strip(), "%B %d, %Y").date()
         return event_date >= today
     except Exception as e:
-        print(f"Date parsing error for '{date_str}': {e}")
+        print(f"[SKIP] Failed to parse date '{date_str}': {e}")
         return False
 
 @app.route("/")
@@ -87,15 +87,18 @@ def show_events():
     events = []
 
     for entry in feed.entries:
-        date_str, time_str, location_str = parse_event_date(entry.summary)
-        if is_future_event(date_str):
-            events.append({
-                "title": entry.title,
-                "link": entry.link,
-                "date": date_str,
-                "time": time_str,
-                "location": location_str
-            })
+    date_str, time_str, location_str = parse_event_date(entry.summary)
+    print(f"[PARSE] Title: {entry.title} | Date: {date_str}")
+    if is_future_event(date_str):
+        events.append({
+            "title": entry.title,
+            "link": entry.link,
+            "date": date_str,
+            "time": time_str,
+            "location": location_str
+        })
+    else:
+        print(f"[SKIP] {entry.title} excluded: '{date_str}' is in the past")
 
     events = sorted(events, key=lambda e: datetime.strptime(e["date"].split(" - ")[0], "%B %d, %Y"))
     return render_template_string(TEMPLATE, events=events)
