@@ -1,119 +1,82 @@
 from flask import Flask, render_template_string
 import feedparser
+from bs4 import BeautifulSoup
+import re
 from datetime import datetime
-import pytz
 
 app = Flask(__name__)
 
-FEED_URL = "https://www.romeoville.org/RSSFeed.aspx?ModID=58&CID=All-calendar.xml"
+RSS_URL = "https://www.romeoville.org/RSSFeed.aspx?ModID=58&CID=All-calendar.xml"
 
-TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Romeoville Upcoming Events</title>
-    <meta charset="utf-8">
-    <style>
-        body {
-            background-color: #00274D;
-            font-family: Arial, sans-serif;
-            color: white;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-        }
-        h1 {
-            text-align: center;
-            font-size: 2.5em;
-            margin: 20px 0;
-        }
-        .marquee {
-            height: 100vh;
-            overflow: hidden;
-            position: relative;
-        }
-        .marquee-content {
-            display: flex;
-            flex-direction: column;
-            animation: scroll-up 20s linear infinite;
-            width: 100%;
-            align-items: center;
-        }
-        .event {
-            width: 80%;
-            margin: 20px auto;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            text-align: center;
-        }
-        .event h2 {
-            font-size: 1.8em;
-            margin: 0 0 10px;
-        }
-        .event p {
-            font-size: 1.2em;
-            margin: 0;
-        }
-        @keyframes scroll-up {
-            0% {
-                transform: translateY(100%);
-            }
-            100% {
-                transform: translateY(-100%);
-            }
-        }
-    </style>
-</head>
-<body>
-    <h1>Romeoville Upcoming Events</h1>
-    <div class="marquee">
-        <div class="marquee-content">
-            {% if events %}
-                {% for event in events %}
-                    <div class="event">
-                        <h2>{{ event.title }}</h2>
-                        <p>{{ event.date }}</p>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <div class="event">
-                    <h2>No upcoming events found</h2>
-                </div>
-            {% endif %}
-        </div>
-    </div>
-</body>
-</html>
+HTML_TEMPLATE = """
+<!doctype html>
+<title>Romeoville Events</title>
+<h1>Upcoming Romeoville Events</h1>
+{% if events %}
+  <ul>
+  {% for e in events %}
+    <li><strong>{{ e.title }}</strong><br>
+        {{ e.date_str }} | {{ e.time }}<br>
+        {{ e.location }}<br>
+        <a href="{{ e.link }}">Details</a>
+    </li>
+  {% endfor %}
+  </ul>
+{% else %}
+  <p>No upcoming events found.</p>
+{% endif %}
 """
 
-def parse_date(entry):
-    # Try extracting date from entry.updated or entry.published
-    date_str = entry.get('updated', '') or entry.get('published', '')
+def extract_event_date_and_time(desc_html):
+    """Returns (date, date_str, time_range) or (None, None, None)."""
+    soup = BeautifulSoup(desc_html, "html.parser")
+    text = " ".join(soup.get_text(separator=" ").split())
+
+    # Date: match "July 23, 2025"
+    date_match = re.search(r"(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}", text)
+    time_match = re.search(r"(\d{1,2}:\d{2} (?:AM|PM) - \d{1,2}:\d{2} (?:AM|PM))", text)
+
+    if not date_match:
+        return None, None, None
+
+    date_str = date_match.group(0)
     try:
-        return datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %Z")
+        event_date = datetime.strptime(date_str, "%B %d, %Y").date()
     except ValueError:
-        try:
-            return datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S %z")
-        except Exception:
-            return None
+        return None, None, None
 
-@app.route('/')
+    time_range = time_match.group(1) if time_match else ""
+    return event_date, date_str, time_range
+
+@app.route("/")
 def index():
-    feed = feedparser.parse(FEED_URL)
-    now = datetime.now(pytz.timezone('US/Central'))
+    fp = feedparser.parse(RSS_URL)
+    events = []
+    today = datetime.now().date()
 
-    upcoming_events = []
-    for entry in feed.entries:
-        date = parse_date(entry)
-        if date and date >= now:
-            upcoming_events.append({
-                "title": entry.title,
-                "date": date.strftime("%A, %B %d, %Y at %I:%M %p")
+    for entry in fp.entries:
+        desc = entry.get("summary", entry.get("description", ""))
+        event_date, date_str, time_range = extract_event_date_and_time(desc)
+        if event_date and event_date >= today:
+            # Get clean location text
+            loc_soup = BeautifulSoup(desc, "html.parser")
+            loc_text = ""
+            if "Location:" in loc_soup.get_text():
+                # Grab everything after the "Location:" label
+                parts = loc_soup.get_text().split("Location:", 1)[1].strip()
+                loc_text = parts.split("Event Time:",1)[0].strip()
+            events.append({
+                "title": entry.get("title", "No title"),
+                "date_str": date_str,
+                "time": time_range,
+                "location": loc_text,
+                "link": entry.get("link", "#")
             })
 
-    upcoming_events.sort(key=lambda x: datetime.strptime(x["date"], "%A, %B %d, %Y at %I:%M %p"))
-    return render_template_string(TEMPLATE, events=upcoming_events)
+    # Sort events chronologically
+    events.sort(key=lambda e: datetime.strptime(e["date_str"], "%B %d, %Y").date())
 
-if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000)
+    return render_template_string(HTML_TEMPLATE, events=events)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(__import__("os").environ.get("PORT", 5000)))
