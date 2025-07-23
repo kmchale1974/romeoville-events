@@ -1,7 +1,8 @@
 from flask import Flask, render_template_string
 import feedparser
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
+import re
 
 app = Flask(__name__)
 
@@ -32,7 +33,7 @@ TEMPLATE = """
         }
         .scroll {
             display: inline-block;
-            animation: scrollUp 60s linear infinite;
+            animation: scrollUp 90s linear infinite;
         }
         @keyframes scrollUp {
             0%   { transform: translateY(100%); }
@@ -42,10 +43,10 @@ TEMPLATE = """
             margin: 2em 0;
             font-size: 1.5em;
             font-weight: bold;
-            padding: 1em;
         }
         .event:nth-child(even) {
-            background-color: #f0f8ff; /* Soft blue */
+            background-color: #e6f0ff;
+            padding: 1em;
             border-radius: 8px;
         }
     </style>
@@ -66,6 +67,17 @@ TEMPLATE = """
 </html>
 """
 
+def extract_event_date(description):
+    match = re.search(r'Event date: ([A-Za-z]+ \d{1,2}, \d{4}) from ([\d:APMapm\s]+) to ([\d:APMapm\s]+)', description)
+    if match:
+        date_str, start_time, end_time = match.groups()
+        try:
+            event_datetime = datetime.strptime(f"{date_str} {start_time.strip()}", "%B %d, %Y %I:%M %p")
+            return event_datetime
+        except Exception as e:
+            print(f"Date parse error: {e}")
+    return None
+
 @app.route("/")
 def index():
     feed = feedparser.parse(FEED_URL)
@@ -73,18 +85,13 @@ def index():
     upcoming_events = []
 
     for entry in feed.entries:
-        try:
-            if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                event_date = datetime(*entry.published_parsed[:6], tzinfo=pytz.utc).astimezone(pytz.timezone("America/Chicago"))
-                if event_date >= now:
-                    summary = getattr(entry, 'summary', '').strip()
-                    location = entry.get('location', '')
-                    display_text = f"{event_date.strftime('%A, %B %d, %Y at %I:%M %p')} - {entry.title}"
-                    if summary:
-                        display_text += f"<br><small>{summary}</small>"
-                    upcoming_events.append(display_text)
-        except Exception as e:
-            print(f"Error parsing entry '{entry}': {e}")
+        if hasattr(entry, "description"):
+            event_datetime = extract_event_date(entry.description)
+            if event_datetime and event_datetime >= now:
+                event_title = entry.title
+                location = entry.get("location", "Location not specified")
+                formatted = f"{event_title} – {event_datetime.strftime('%b %d, %Y at %I:%M %p')} – {location}"
+                upcoming_events.append(formatted)
 
     return render_template_string(TEMPLATE, events=upcoming_events)
 
