@@ -42,26 +42,36 @@ def index():
     now = datetime.now(pytz.timezone("America/Chicago"))
     parsed_events = []
 
-    for entry in feed.entries:
+       for entry in feed.entries:
+        print(f"\n--- ENTRY: {entry.title} ---")
+        print(entry.description)
+
         soup = BeautifulSoup(entry.description, "html.parser")
         strong_tags = soup.find_all("strong")
         for tag in strong_tags:
             if "Event date" in tag.text:
                 text = tag.next_sibling
+                print(f"Raw sibling text: {text}")
+
                 if text:
                     date_str = text.strip().split(" - ")[0]
+                    print(f"Extracted date string: '{date_str}'")
+
                     try:
                         event_date = datetime.strptime(date_str, "%B %d, %Y")
                         event_date = pytz.timezone("America/Chicago").localize(event_date)
-                        print(f"Parsed '{entry.title}' -> {event_date}")
+                        print(f"Parsed date: {event_date}")
                         if event_date >= now:
                             parsed_events.append({
                                 "title": entry.title,
                                 "date": event_date.strftime("%B %d, %Y")
                             })
+                        else:
+                            print("Skipped: in the past")
                     except Exception as e:
-                        print(f"Failed to parse '{entry.title}': {e}")
+                        print(f"❌ Failed to parse '{entry.title}': {e}")
                 break
+
 
     return render_template_string(TEMPLATE, events=parsed_events)
 
