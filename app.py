@@ -1,19 +1,18 @@
 from flask import Flask, render_template_string
 import feedparser
-from bs4 import BeautifulSoup
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 import pytz
 
 app = Flask(__name__)
 
-FEED_URL = "https://www.romeoville.org/RSSFeed.aspx?ModID=58&CID=All-calendar.xml"
-
+FEED_URL = "https://www.romeoville.org/Calendar.aspx?RSS=1&CID=14"
 TEMPLATE = """
 <!DOCTYPE html>
-<html lang="en">
+<html lang=\"en\">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset=\"UTF-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
     <title>Romeoville Events</title>
     <style>
         body {
@@ -29,16 +28,19 @@ TEMPLATE = """
         .container {
             width: 90%;
             max-width: 800px;
+            height: 100%;
             overflow: hidden;
             text-align: center;
+            position: relative;
         }
-        .scrolling {
-            display: inline-block;
-            animation: scrollUp 30s linear infinite;
+        .scrolling-wrapper {
+            display: flex;
+            flex-direction: column;
+            animation: scrollUp 60s linear infinite;
         }
         @keyframes scrollUp {
-            0% { transform: translateY(100%); }
-            100% { transform: translateY(-100%); }
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-50%); }
         }
         .event {
             margin: 2em 0;
@@ -48,11 +50,14 @@ TEMPLATE = """
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class=\"container\">
         {% if events %}
-        <div class="scrolling">
+        <div class=\"scrolling-wrapper\">
             {% for event in events %}
-            <div class="event">{{ event }}</div>
+            <div class=\"event\">{{ event }}</div>
+            {% endfor %}
+            {% for event in events %}
+            <div class=\"event\">{{ event }}</div>
             {% endfor %}
         </div>
         {% else %}
@@ -67,26 +72,27 @@ TEMPLATE = """
 def index():
     feed = feedparser.parse(FEED_URL)
     now = datetime.now(pytz.timezone("America/Chicago"))
-    parsed_events = []
+    upcoming_events = []
 
     for entry in feed.entries:
-        soup = BeautifulSoup(entry.description, "html.parser")
-        strong_tags = soup.find_all("strong")
-        for tag in strong_tags:
-            if "Event date" in tag.text:
-                text = tag.next_sibling
-                if text:
-                    date_str = text.strip().split(" - ")[0]
-                    try:
-                        event_date = datetime.strptime(date_str, "%B %d, %Y")
-                        event_date = pytz.timezone("America/Chicago").localize(event_date)
-                        if event_date >= now:
-                            parsed_events.append(f"{event_date.strftime('%B %d, %Y')}: {entry.title}")
-                    except Exception as e:
-                        print(f"❌ Failed to parse '{entry.title}': {e}")
-                break
+        match = re.search(r"Event date[s]?:\\s*(.+?)<", entry.description)
+        if match:
+            date_str = match.group(1).split("<")[0].strip()
+            try:
+                # Parse date (single date or date range)
+                if "-" in date_str:
+                    start_str, _ = date_str.split("-")
+                    event_date = datetime.strptime(start_str.strip(), "%B %d, %Y")
+                else:
+                    event_date = datetime.strptime(date_str, "%B %d, %Y")
 
-    return render_template_string(TEMPLATE, events=parsed_events)
+                event_date = pytz.timezone("America/Chicago").localize(event_date)
+                if event_date >= now:
+                    upcoming_events.append(entry.title)
+            except Exception as e:
+                print(f"Error parsing date from entry '{entry.title}': {e}")
+
+    return render_template_string(TEMPLATE, events=upcoming_events)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
