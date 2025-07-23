@@ -1,12 +1,13 @@
 from flask import Flask, render_template_string
 import feedparser
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 
 app = Flask(__name__)
 
 FEED_URL = "https://www.romeoville.org/Calendar.aspx?RSS=1&CID=14"
+
 TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -18,38 +19,38 @@ TEMPLATE = """
         body {
             background-color: #f4f4f4;
             font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+            text-align: center;
             margin: 0;
+            padding: 0;
         }
         .container {
             width: 90%;
             max-width: 800px;
-            text-align: center;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             overflow: hidden;
             position: relative;
         }
-        .scroll {
+        .scrolling {
             display: inline-block;
-            animation: scrollUp 30s linear infinite;
+            animation: scrollUp 40s linear infinite;
         }
         @keyframes scrollUp {
             0%   { transform: translateY(100%); }
             100% { transform: translateY(-100%); }
         }
         .event {
-            margin: 2em 0;
-            font-size: 1.5em;
-            font-weight: bold;
+            font-size: 2em;
+            margin: 1.5em 0;
         }
     </style>
 </head>
 <body>
     <div class="container">
         {% if events %}
-        <div class="scroll">
+        <div class="scrolling">
             {% for event in events %}
             <div class="event">{{ event }}</div>
             {% endfor %}
@@ -69,22 +70,16 @@ def index():
     upcoming_events = []
 
     for entry in feed.entries:
-        match = re.search(r"Event date[s]?:\s*(.+?)<", entry.description)
+        description = entry.get("description", "")
+        match = re.search(r"Event date[s]?:\s*([A-Za-z]+\s\d{1,2},\s\d{4})", description)
         if match:
-            date_str = match.group(1).split("<")[0].strip()
             try:
-                # Parse date (single date or date range)
-                if "-" in date_str:
-                    start_str, _ = date_str.split("-")
-                    event_date = datetime.strptime(start_str.strip(), "%B %d, %Y")
-                else:
-                    event_date = datetime.strptime(date_str, "%B %d, %Y")
-
+                event_date = datetime.strptime(match.group(1), "%B %d, %Y")
                 event_date = pytz.timezone("America/Chicago").localize(event_date)
-                if event_date >= now:
+                if event_date.date() >= now.date():
                     upcoming_events.append(entry.title)
             except Exception as e:
-                print(f"Error parsing date from entry '{entry.title}': {e}")
+                print(f"Skipping event due to date parsing issue: {e}")
 
     return render_template_string(TEMPLATE, events=upcoming_events)
 
