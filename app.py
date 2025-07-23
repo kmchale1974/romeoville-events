@@ -10,53 +10,28 @@ FEED_URL = "https://www.romeoville.org/Calendar.aspx?RSS=1&CID=14"
 
 TEMPLATE = """
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>Romeoville Events</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug View - Romeoville Events</title>
     <style>
-        body {
-            background: #f4f4f4;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 2em;
-            text-align: center;
-        }
-        .scroll-wrapper {
-            overflow: hidden;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .scroll {
-            display: inline-block;
-            animation: scrollUp 20s linear infinite;
-        }
-        @keyframes scrollUp {
-            0% { transform: translateY(100%); }
-            100% { transform: translateY(-100%); }
-        }
-        .event {
-            margin: 2em 0;
-            font-size: 1.8em;
-            font-weight: bold;
-        }
+        body { font-family: Arial, sans-serif; padding: 2em; background: #fff; color: #333; }
+        h1 { color: #222; }
+        .event { margin-bottom: 1em; }
     </style>
 </head>
 <body>
-    <div class="scroll-wrapper">
-        {% if events %}
-        <div class="scroll">
-            {% for event in events %}
-            <div class="event">{{ event }}</div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <p>No upcoming events found</p>
-        {% endif %}
-    </div>
+    <h1>Parsed Events</h1>
+    {% if events %}
+        {% for event in events %}
+            <div class="event">
+                <strong>{{ event.title }}</strong><br>
+                Date: {{ event.date }}<br>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No upcoming events found.</p>
+    {% endif %}
 </body>
 </html>
 """
@@ -65,28 +40,30 @@ TEMPLATE = """
 def index():
     feed = feedparser.parse(FEED_URL)
     now = datetime.now(pytz.timezone("America/Chicago"))
-    events = []
+    parsed_events = []
 
     for entry in feed.entries:
         soup = BeautifulSoup(entry.description, "html.parser")
         strong_tags = soup.find_all("strong")
-
-        event_date = None
         for tag in strong_tags:
             if "Event date" in tag.text:
                 text = tag.next_sibling
                 if text:
                     date_str = text.strip().split(" - ")[0]
                     try:
-                        dt = datetime.strptime(date_str, "%B %d, %Y")
-                        dt = pytz.timezone("America/Chicago").localize(dt)
-                        if dt >= now:
-                            events.append(entry.title.strip())
+                        event_date = datetime.strptime(date_str, "%B %d, %Y")
+                        event_date = pytz.timezone("America/Chicago").localize(event_date)
+                        print(f"Parsed '{entry.title}' -> {event_date}")
+                        if event_date >= now:
+                            parsed_events.append({
+                                "title": entry.title,
+                                "date": event_date.strftime("%B %d, %Y")
+                            })
                     except Exception as e:
-                        print(f"Error parsing '{entry.title}': {e}")
+                        print(f"Failed to parse '{entry.title}': {e}")
                 break
 
-    return render_template_string(TEMPLATE, events=events)
+    return render_template_string(TEMPLATE, events=parsed_events)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
