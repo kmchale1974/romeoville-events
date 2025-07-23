@@ -69,17 +69,23 @@ def index():
 
     for entry in feed.entries:
         try:
-            # Some entries might have 'published_parsed' for date parsing
             if hasattr(entry, 'published_parsed') and entry.published_parsed:
                 event_date = datetime(*entry.published_parsed[:6], tzinfo=pytz.utc).astimezone(pytz.timezone("America/Chicago"))
-                if event_date >= now:
-                    upcoming_events.append(entry.title)
-            elif hasattr(entry, 'title') and 'Event date' in entry.title:
+            else:
+                import re
+                match = re.search(r'Event date:\s*([A-Za-z]+ \d{1,2}, \d{4})', entry.description)
+                if match:
+                    event_date = datetime.strptime(match.group(1), '%B %d, %Y')
+                    event_date = pytz.timezone("America/Chicago").localize(event_date)
+                else:
+                    continue  # Skip if no date found
+            if event_date >= now:
                 upcoming_events.append(entry.title)
         except Exception as e:
-            print(f"Error parsing entry '{entry}': {e}")
+            print(f"Error parsing entry: {e}")
 
     return render_template_string(TEMPLATE, events=upcoming_events)
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
