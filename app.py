@@ -91,7 +91,7 @@ def show_events():
     feed = feedparser.parse(FEED_URL)
     events = []
 
-    for entry in feed.entries:
+for entry in feed.entries:
     start_date_str, end_date_str = parse_event_date(entry.summary or "")
     if not start_date_str:
         print(f"[SKIP] Could not find event date in: {entry.title}")
@@ -102,12 +102,11 @@ def show_events():
             "title": entry.title,
             "link": entry.link,
             "date": start_date_str,
-            "time": "",  # Optional: extract from summary
-            "location": ""  # Optional: extract from summary
+            "time": "",  # Optional: extract time from summary if desired
+            "location": ""  # Optional: extract location from summary if desired
         })
     else:
         print(f"[SKIP] Event '{entry.title}' has start date '{start_date_str}' in the past")
-
 
     events = sorted(events, key=lambda e: datetime.strptime(e["date"].split(" - ")[0], "%B %d, %Y"))
     return render_template_string(TEMPLATE, events=events)
