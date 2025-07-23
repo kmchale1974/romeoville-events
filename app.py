@@ -1,8 +1,5 @@
 from flask import Flask, render_template_string
 import feedparser
-from datetime import datetime
-import pytz
-import time
 
 app = Flask(__name__)
 
@@ -11,63 +8,45 @@ RSS_FEED_URL = "https://www.romeoville.org/RSSFeed.aspx?ModID=58&CID=All-calenda
 @app.route('/')
 def index():
     feed = feedparser.parse(RSS_FEED_URL)
-    events = []
 
-    now = datetime.now(pytz.timezone("America/Chicago"))
+    debug_entries = []
 
     for entry in feed.entries:
-        try:
-            # Try using published_parsed (if available)
-            if hasattr(entry, 'published_parsed'):
-                event_time = datetime.fromtimestamp(time.mktime(entry.published_parsed), tz=pytz.utc)
-            else:
-                # Fallback to parsing pubDate manually
-                pub_date = entry.get('pubDate') or entry.get('published')
-                if pub_date:
-                    event_time = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=pytz.utc)
-                else:
-                    continue
-
-            event_time_local = event_time.astimezone(pytz.timezone("America/Chicago"))
-            if event_time_local.date() >= now.date():
-                events.append({
-                    'title': entry.title,
-                    'date': event_time_local.strftime("%A, %B %d, %Y"),
-                    'link': entry.link
-                })
-        except Exception as e:
-            print(f"Skipping event due to error: {e}")
-            continue
+        debug_entries.append({
+            'title': getattr(entry, 'title', 'N/A'),
+            'link': getattr(entry, 'link', 'N/A'),
+            'published': getattr(entry, 'published', 'N/A'),
+            'published_parsed': str(getattr(entry, 'published_parsed', 'N/A')),
+            'summary': getattr(entry, 'summary', 'N/A'),
+            'keys': list(entry.keys())
+        })
 
     return render_template_string("""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Romeoville Events</title>
+        <title>DEBUG: Romeoville RSS Feed</title>
         <style>
-            body { font-family: Arial, sans-serif; background: #f0f4f8; color: #003865; padding: 2rem; text-align: center; }
+            body { font-family: monospace; background: #f5f5f5; padding: 2rem; }
             h1 { color: #003865; }
-            .event { background: white; margin: 1rem auto; padding: 1rem; max-width: 600px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-            .event h2 { margin: 0 0 0.5rem; }
-            .event p { margin: 0.3rem 0; }
+            .entry { background: white; padding: 1rem; margin-bottom: 1.5rem; border-left: 5px solid #003865; }
         </style>
     </head>
     <body>
-        <h1>Romeoville Upcoming Events</h1>
-        {% if events %}
-            {% for event in events %}
-                <div class="event">
-                    <h2>{{ event.title }}</h2>
-                    <p>{{ event.date }}</p>
-                    <p><a href="{{ event.link }}" target="_blank">More Info</a></p>
-                </div>
-            {% endfor %}
-        {% else %}
-            <p>No upcoming events found.</p>
-        {% endif %}
+        <h1>Romeoville RSS Feed - DEBUG VIEW</h1>
+        {% for entry in debug_entries %}
+            <div class="entry">
+                <strong>Title:</strong> {{ entry.title }}<br>
+                <strong>Link:</strong> <a href="{{ entry.link }}">{{ entry.link }}</a><br>
+                <strong>Published:</strong> {{ entry.published }}<br>
+                <strong>Published Parsed:</strong> {{ entry.published_parsed }}<br>
+                <strong>Summary:</strong> {{ entry.summary|safe }}<br>
+                <strong>All Keys:</strong> {{ entry.keys }}
+            </div>
+        {% endfor %}
     </body>
     </html>
-    """, events=events)
+    """, debug_entries=debug_entries)
 
 if __name__ == '__main__':
     import os
