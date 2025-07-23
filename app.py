@@ -2,12 +2,12 @@ from flask import Flask, render_template_string
 import feedparser
 from datetime import datetime
 import pytz
+import re
 
 app = Flask(__name__)
 
 RSS_FEED_URL = "https://www.romeoville.org/RSSFeed.aspx?ModID=58&CID=All-calendar.xml"
 
-# Template styled similar to Romeoville's site
 TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -71,36 +71,41 @@ TEMPLATE = """
 """
 
 def parse_event_date(summary):
-    # RSS summary looks like "Date: July 22, 2025 - July 23, 2025"
     try:
-        if "Date:" in summary:
-            date_part = summary.split("Date:")[1].split("<br")[0].strip()
-            parts = date_part.split(" - ")
-            start_date = datetime.strptime(parts[0], "%B %d, %Y")
-            end_date = datetime.strptime(parts[1], "%B %d, %Y") if len(parts) > 1 else None
-            return start_date, end_date
-    except Exception as e:
-        print(f"[ERROR] Failed to parse date from summary: {summary} -> {e}")
-    return None, None
+        match = re.search(r"Date:\s*(.+?)<br", summary)
+        if not match:
+            return None
+        date_text = match.group(1).strip()
+        parts = date_text.split(" - ")
 
-def is_future_event(start_date):
-    now = datetime.now(pytz.timezone("America/Chicago"))
-    return start_date >= now
+        start_str = parts[0].strip()
+        start_date = datetime.strptime(start_str, "%B %d, %Y")
+
+        return start_date
+    except Exception as e:
+        print(f"[Date Parse Error] {e} in summary: {summary}")
+        return None
+
+def is_future_date(date_obj):
+    chicago_tz = pytz.timezone("America/Chicago")
+    now = datetime.now(chicago_tz)
+    return date_obj.replace(tzinfo=chicago_tz) >= now
 
 @app.route("/")
 def show_events():
-    events = []
     feed = feedparser.parse(RSS_FEED_URL)
+    events = []
 
     for entry in feed.entries:
-        start_date, end_date = parse_event_date(entry.summary or "")
+        summary = entry.summary or ""
+        start_date = parse_event_date(summary)
         if not start_date:
             continue
-        if is_future_event(start_date):
+        if is_future_date(start_date):
             events.append({
                 "title": entry.title,
                 "link": entry.link,
-                "date": start_date.strftime("%B %d, %Y"),
+                "date": start_date.strftime("%B %d, %Y")
             })
 
     return render_template_string(TEMPLATE, events=events)
