@@ -1,18 +1,19 @@
 from flask import Flask, render_template_string
 import feedparser
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
 FEED_URL = "https://www.romeoville.org/RSSFeed.aspx?ModID=58&CID=All-calendar.xml"
+
 TEMPLATE = """
 <!DOCTYPE html>
-<html lang=\"en\">
+<html lang="en">
 <head>
-    <meta charset=\"UTF-8\">
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Romeoville Events</title>
     <style>
         body {
@@ -44,20 +45,14 @@ TEMPLATE = """
             font-size: 1.2em;
             padding: 1em;
         }
-        .even {
-            background-color: #e6f0ff;
-            border-radius: 10px;
-        }
     </style>
 </head>
 <body>
-    <div class=\"container\">
+    <div class="container">
         {% if events %}
-        <div class=\"scroll\">
+        <div class="scroll">
             {% for event in events %}
-            <div class=\"event {% if loop.index0 % 2 == 0 %}even{% endif %}\">
-                {{ event }}
-            </div>
+            <div class="event">{{ event }}</div>
             {% endfor %}
         </div>
         {% else %}
@@ -76,7 +71,6 @@ def index():
 
     for entry in feed.entries:
         try:
-            # Parse date from title or description
             description = entry.get("description", "")
             soup = BeautifulSoup(description, "html.parser")
             text = soup.get_text()
