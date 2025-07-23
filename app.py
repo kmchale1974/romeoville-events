@@ -107,5 +107,5 @@ def home():
     events.sort(key=lambda e: datetime.strptime(e["date"], "%B %d, %Y"))
     return render_template_string(TEMPLATE, events=events)
 
-if __name__ == "__main__":
-    app.run(debug=False, port=8000)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8000)
