@@ -57,29 +57,34 @@ TEMPLATE = """
 </html>
 """
 
+import re
+
 def parse_event_date(summary):
-    date_match = re.search(r"Event date[s]*: (.*?)\n", summary)
-    time_match = re.search(r"Event Time: (.*?)\n", summary)
-    location_match = re.search(r"Location:\s*(.*?)\s*Romeoville", summary, re.DOTALL)
-    
-    date_str = date_match.group(1).strip() if date_match else ''
-    time_str = time_match.group(1).strip() if time_match else ''
-    location_str = location_match.group(1).strip().replace("\n", ", ") + ", Romeoville, IL" if location_match else "Romeoville, IL"
-    
-    return date_str, time_str, location_str
+    # Extract the event date line from the summary
+    match = re.search(r'Event date[s]*: (.+?)(?:<br|\\n|$)', summary)
+    if not match:
+        return None, None, None
+
+    date_part = match.group(1).strip()
+
+    # Example: "July 21, 2025 - July 25, 2025"
+    if " - " in date_part:
+        start_date_str, end_date_str = [d.strip() for d in date_part.split(" - ")]
+    else:
+        start_date_str = date_part.strip()
+        end_date_str = start_date_str
+
+    return start_date_str, end_date_str
 
 def is_future_event(date_str):
     today = datetime.now().date()
     try:
-        if " - " in date_str:
-            end_str = date_str.split(" - ")[1].strip()
-            event_date = datetime.strptime(end_str, "%B %d, %Y").date()
-        else:
-            event_date = datetime.strptime(date_str.strip(), "%B %d, %Y").date()
+        event_date = datetime.strptime(date_str, "%B %d, %Y").date()
         return event_date >= today
     except Exception as e:
-        print(f"[SKIP] Failed to parse date '{date_str}': {e}")
+        print(f"[ERROR] Failed to parse date '{date_str}': {e}")
         return False
+
 
 @app.route("/")
 def show_events():
@@ -87,18 +92,22 @@ def show_events():
     events = []
 
     for entry in feed.entries:
-    date_str, time_str, location_str = parse_event_date(entry.summary)
-    print(f"[PARSE] Title: {entry.title} | Date: {date_str}")
-    if is_future_event(date_str):
+    start_date_str, end_date_str = parse_event_date(entry.summary or "")
+    if not start_date_str:
+        print(f"[SKIP] Could not find event date in: {entry.title}")
+        continue
+
+    if is_future_event(start_date_str):
         events.append({
             "title": entry.title,
             "link": entry.link,
-            "date": date_str,
-            "time": time_str,
-            "location": location_str
+            "date": start_date_str,
+            "time": "",  # Optional: extract from summary
+            "location": ""  # Optional: extract from summary
         })
     else:
-        print(f"[SKIP] {entry.title} excluded: '{date_str}' is in the past")
+        print(f"[SKIP] Event '{entry.title}' has start date '{start_date_str}' in the past")
+
 
     events = sorted(events, key=lambda e: datetime.strptime(e["date"].split(" - ")[0], "%B %d, %Y"))
     return render_template_string(TEMPLATE, events=events)
