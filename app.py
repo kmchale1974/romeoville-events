@@ -1,8 +1,8 @@
 from flask import Flask, render_template_string
 import feedparser
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
-import re
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
@@ -41,13 +41,12 @@ TEMPLATE = """
         }
         .event {
             margin: 2em 0;
-            font-size: 1.5em;
-            font-weight: bold;
-        }
-        .event:nth-child(even) {
-            background-color: #e6f0ff;
+            font-size: 1.2em;
             padding: 1em;
-            border-radius: 8px;
+        }
+        .even {
+            background-color: #e6f0ff;
+            border-radius: 10px;
         }
     </style>
 </head>
@@ -56,7 +55,9 @@ TEMPLATE = """
         {% if events %}
         <div class=\"scroll\">
             {% for event in events %}
-            <div class=\"event\">{{ event }}</div>
+            <div class=\"event {% if loop.index0 % 2 == 0 %}even{% endif %}\">
+                {{ event }}
+            </div>
             {% endfor %}
         </div>
         {% else %}
@@ -67,17 +68,6 @@ TEMPLATE = """
 </html>
 """
 
-def extract_event_date(description):
-    match = re.search(r'Event date: ([A-Za-z]+ \d{1,2}, \d{4}) from ([\d:APMapm\s]+) to ([\d:APMapm\s]+)', description)
-    if match:
-        date_str, start_time, end_time = match.groups()
-        try:
-            event_datetime = datetime.strptime(f"{date_str} {start_time.strip()}", "%B %d, %Y %I:%M %p")
-            return event_datetime
-        except Exception as e:
-            print(f"Date parse error: {e}")
-    return None
-
 @app.route("/")
 def index():
     feed = feedparser.parse(FEED_URL)
@@ -85,13 +75,25 @@ def index():
     upcoming_events = []
 
     for entry in feed.entries:
-        if hasattr(entry, "description"):
-            event_datetime = extract_event_date(entry.description)
-            if event_datetime and event_datetime >= now:
-                event_title = entry.title
-                location = entry.get("location", "Location not specified")
-                formatted = f"{event_title} – {event_datetime.strftime('%b %d, %Y at %I:%M %p')} – {location}"
-                upcoming_events.append(formatted)
+        try:
+            # Parse date from title or description
+            description = entry.get("description", "")
+            soup = BeautifulSoup(description, "html.parser")
+            text = soup.get_text()
+
+            event_date = None
+            if "Event date:" in text:
+                parts = text.split("Event date:")[1].split("\n")[0].strip()
+                if " - " in parts:
+                    parts = parts.split(" - ")[0]
+                event_date = datetime.strptime(parts, "%B %d, %Y")
+                event_date = pytz.timezone("America/Chicago").localize(event_date)
+
+            if event_date and event_date >= now:
+                event_info = f"{entry.title} — {parts}"
+                upcoming_events.append(event_info)
+        except Exception as e:
+            print(f"Error parsing entry '{entry}': {e}")
 
     return render_template_string(TEMPLATE, events=upcoming_events)
 
