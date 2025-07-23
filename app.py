@@ -1,74 +1,90 @@
 from flask import Flask, render_template_string
+import requests
 import feedparser
 from datetime import datetime
-import os
+import pytz
 
 app = Flask(__name__)
 
-RSS_URL = "https://www.romeoville.org/RSSFeed.aspx?ModID=76&CID=All-0"
+FEED_URL = "https://www.romeoville.org/RSSFeed.aspx?ModID=58&CID=All-calendar.xml"
+TIMEZONE = pytz.timezone("America/Chicago")
 
-HTML_TEMPLATE = """
+TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Romeoville Events</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #002856; color: white; margin:0; padding:0; overflow:hidden; }
-    h1 { text-align:center; background:#0066a1; padding:20px; margin:0; font-size:2em; }
-    .scroll-container { height:90vh; overflow:hidden; position:relative; }
-    .events { animation: scroll-up 30s linear infinite; padding:20px; }
-    .event { margin-bottom: 40px; border-bottom: 1px solid #ccc; padding-bottom:10px; }
-    .title a { font-size:1.4em; color:#ffc72c; text-decoration:none; }
-    .desc { font-size:1.1em; color:#ddd; margin-top:5px; }
-    .datetime { font-size:0.95em; color:#aaa; margin-top:5px; }
-    @keyframes scroll-up { 0% { transform: translateY(100%); } 100% { transform: translateY(-100%); } }
-  </style>
+    <meta charset="UTF-8">
+    <title>Romeoville Upcoming Events</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f2f2f2;
+            color: #333;
+            padding: 30px;
+            text-align: center;
+        }
+        h1 {
+            color: #002855;
+            margin-bottom: 30px;
+        }
+        .event {
+            background: white;
+            margin: 15px auto;
+            padding: 20px;
+            border-radius: 12px;
+            max-width: 600px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+        }
+        .event h2 {
+            margin: 0;
+            color: #0066cc;
+        }
+        .event p {
+            margin: 5px 0;
+        }
+    </style>
 </head>
 <body>
-  <h1>Romeoville Upcoming Events</h1>
-  <div class="scroll-container">
-    <div class="events">
-      {% for e in events %}
-        <div class="event">
-          <div class="title"><a href="{{ e.link }}" target="_blank">{{ e.title }}</a></div>
-          <div class="desc">{{ e.description }}</div>
-          <div class="datetime">{{ e.date }}</div>
-        </div>
-      {% endfor %}
-      {% if not events %}
-        <div class="event">No upcoming events found.</div>
-      {% endif %}
-    </div>
-  </div>
+    <h1>Romeoville Upcoming Events</h1>
+    {% if events %}
+        {% for event in events %}
+            <div class="event">
+                <h2>{{ event.title }}</h2>
+                <p><strong>{{ event.date }}</strong></p>
+                <p>{{ event.description }}</p>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No upcoming events found.</p>
+    {% endif %}
 </body>
 </html>
 """
 
 @app.route("/")
 def index():
-    feed = feedparser.parse(RSS_URL)
-    now = datetime.now()
+    feed = feedparser.parse(FEED_URL)
     events = []
 
     for entry in feed.entries:
-        dt = None
-        if hasattr(entry, "published_parsed"):
-            dt = datetime(*entry.published_parsed[:6])
-        elif hasattr(entry, "updated_parsed"):
-            dt = datetime(*entry.updated_parsed[:6])
+        try:
+            # Attempt to parse the published date
+            event_time = datetime(*entry.published_parsed[:6])
+            event_time = pytz.utc.localize(event_time).astimezone(TIMEZONE)
+        except Exception:
+            continue
 
-        if dt and dt >= now:
+        if event_time >= datetime.now(TIMEZONE):
             events.append({
                 "title": entry.title,
-                "link": entry.link,
-                "description": entry.description if hasattr(entry, "description") else "",
-                "date": dt.strftime("%B %d, %Y %I:%M %p").lstrip("0")
+                "description": entry.description.strip(),
+                "date": event_time.strftime("%A, %B %d, %Y at %I:%M %p")
             })
 
-    events.sort(key=lambda e: datetime.strptime(e["date"], "%B %d, %Y %I:%M %p"))
-    return render_template_string(HTML_TEMPLATE, events=events)
+    # Sort events by date
+    events.sort(key=lambda e: datetime.strptime(e['date'], "%A, %B %d, %Y at %I:%M %p"))
+
+    return render_template_string(TEMPLATE, events=events)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(debug=True)
