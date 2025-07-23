@@ -128,7 +128,11 @@ def index():
 
     # Sort by date
     events.sort(key=lambda x: parse_event_date(x["date"]))
-    
+   
+    print(f"Found {len(events)} events")
+for e in events:
+    print(e)
+
     return render_template_string(HTML_TEMPLATE, events=events)
 
 if __name__ == '__main__':
