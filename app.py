@@ -2,6 +2,7 @@ from flask import Flask, render_template_string
 import feedparser
 from datetime import datetime
 import pytz
+import time
 
 app = Flask(__name__)
 
@@ -15,46 +16,57 @@ def index():
     now = datetime.now(pytz.timezone("America/Chicago"))
 
     for entry in feed.entries:
-        if 'published' in entry:
-            try:
-                event_date = datetime(*entry.published_parsed[:6], tzinfo=pytz.utc).astimezone(pytz.timezone("America/Chicago"))
-                if event_date.date() >= now.date():
-                    events.append({
-                        'title': entry.title,
-                        'date': event_date.strftime("%A, %B %d, %Y %I:%M %p"),
-                        'link': entry.link
-                    })
-            except Exception as e:
-                print(f"Skipping malformed date: {e}")
-                continue
+        try:
+            # Try using published_parsed (if available)
+            if hasattr(entry, 'published_parsed'):
+                event_time = datetime.fromtimestamp(time.mktime(entry.published_parsed), tz=pytz.utc)
+            else:
+                # Fallback to parsing pubDate manually
+                pub_date = entry.get('pubDate') or entry.get('published')
+                if pub_date:
+                    event_time = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=pytz.utc)
+                else:
+                    continue
+
+            event_time_local = event_time.astimezone(pytz.timezone("America/Chicago"))
+            if event_time_local.date() >= now.date():
+                events.append({
+                    'title': entry.title,
+                    'date': event_time_local.strftime("%A, %B %d, %Y"),
+                    'link': entry.link
+                })
+        except Exception as e:
+            print(f"Skipping event due to error: {e}")
+            continue
 
     return render_template_string("""
-        <html>
-        <head>
-            <title>Romeoville Events</title>
-            <style>
-                body { font-family: Arial, sans-serif; padding: 1rem; background: #f5f5f5; }
-                h1 { text-align: center; color: #003865; }
-                .event { background: #ffffff; margin: 10px auto; padding: 10px; border-radius: 8px; max-width: 600px; }
-                .event h2 { margin: 0; font-size: 1.2em; }
-                .event p { margin: 5px 0 0; color: #555; }
-            </style>
-        </head>
-        <body>
-            <h1>Romeoville Upcoming Events</h1>
-            {% if events %}
-                {% for event in events %}
-                    <div class="event">
-                        <h2>{{ event.title }}</h2>
-                        <p>{{ event.date }}</p>
-                        <p><a href="{{ event.link }}">Details</a></p>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <p style="text-align:center;">No upcoming events found.</p>
-            {% endif %}
-        </body>
-        </html>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Romeoville Events</title>
+        <style>
+            body { font-family: Arial, sans-serif; background: #f0f4f8; color: #003865; padding: 2rem; text-align: center; }
+            h1 { color: #003865; }
+            .event { background: white; margin: 1rem auto; padding: 1rem; max-width: 600px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+            .event h2 { margin: 0 0 0.5rem; }
+            .event p { margin: 0.3rem 0; }
+        </style>
+    </head>
+    <body>
+        <h1>Romeoville Upcoming Events</h1>
+        {% if events %}
+            {% for event in events %}
+                <div class="event">
+                    <h2>{{ event.title }}</h2>
+                    <p>{{ event.date }}</p>
+                    <p><a href="{{ event.link }}" target="_blank">More Info</a></p>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No upcoming events found.</p>
+        {% endif %}
+    </body>
+    </html>
     """, events=events)
 
 if __name__ == '__main__':
