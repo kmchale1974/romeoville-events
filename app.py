@@ -2,109 +2,80 @@ from flask import Flask, render_template_string
 import feedparser
 from datetime import datetime
 import pytz
+import re
 
 app = Flask(__name__)
 
-FEED_URL = "https://www.romeoville.org/RSSFeed.aspx?ModID=58&CID=All-calendar.xml"
+FEED_URL = "https://www.romeoville.org/Calendar.aspx?feed=calendar"
 
 TEMPLATE = """
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Romeoville Events</title>
     <style>
         body {
-            margin: 0;
-            padding: 0;
-            font-family: Arial, sans-serif;
-            background: #111;
+            background-color: #000;
             color: #fff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        h1 {
-            margin-top: 1rem;
-            font-size: 2rem;
+            font-family: Arial, sans-serif;
             text-align: center;
-        }
-        .scroll-container {
-            height: 500px;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
+            padding: 40px;
         }
         .event-list {
             display: inline-block;
-            animation: scrollUp 30s linear infinite;
+            text-align: left;
+            animation: scroll-up 60s linear infinite;
         }
         .event {
-            padding: 1rem;
-            text-align: center;
-            font-size: 1.2rem;
+            margin-bottom: 40px;
+            font-size: 1.5em;
         }
-        @keyframes scrollUp {
+        @keyframes scroll-up {
             0% { transform: translateY(100%); }
             100% { transform: translateY(-100%); }
-        }
-
-        @media (max-width: 600px) {
-            .event {
-                font-size: 1rem;
-            }
         }
     </style>
 </head>
 <body>
-    <h1>Upcoming Romeoville Events</h1>
+    <h1>Upcoming Events in Romeoville</h1>
     {% if events %}
-    <div class="scroll-container">
         <div class="event-list">
             {% for event in events %}
-            <div class="event">
-                <strong>{{ event.date }}</strong><br>
-                {{ event.title }}
-            </div>
+                <div class="event">{{ event['title'] }} — {{ event['date'].strftime('%A, %B %d, %Y') }}</div>
             {% endfor %}
         </div>
-    </div>
     {% else %}
-    <p>No upcoming events found.</p>
+        <p>No upcoming events found.</p>
     {% endif %}
 </body>
 </html>
 """
 
-@app.route("/")
+def extract_event_date(description):
+    match = re.search(r'Event date[s]*:\s*([A-Za-z]+\s+\d{1,2},\s+\d{4})', description)
+    if not match:
+        match = re.search(r'Event date[s]*:\s*([A-Za-z]+\s+\d{1,2},\s+\d{4})\s*-\s*([A-Za-z]+\s+\d{1,2},\s+\d{4})', description)
+        if match:
+            return datetime.strptime(match.group(1), "%B %d, %Y")
+        return None
+    return datetime.strptime(match.group(1), "%B %d, %Y")
+
+@app.route('/')
 def home():
     feed = feedparser.parse(FEED_URL)
+    now = datetime.now()
     events = []
-    central = pytz.timezone("America/Chicago")
-    today = datetime.now(central).date()
 
     for entry in feed.entries:
-        description = entry.get("description", "")
-        lines = description.splitlines()
-        for line in lines:
-            if "Event date" in line or "Event dates" in line:
-                date_str = line.split(":", 1)[-1].strip().replace("<br>", "")
-                date_parts = date_str.split(" - ")[0].strip()
-                try:
-                    event_date = datetime.strptime(date_parts, "%B %d, %Y").date()
-                    if event_date >= today:
-                        events.append({
-                            "title": entry.title,
-                            "date": event_date.strftime("%B %d, %Y")
-                        })
-                except ValueError:
-                    continue
+        event_date = extract_event_date(entry.get('summary', ''))
+        if event_date and event_date >= now:
+            events.append({
+                'title': entry.title,
+                'date': event_date
+            })
 
-    events.sort(key=lambda e: datetime.strptime(e["date"], "%B %d, %Y"))
+    events.sort(key=lambda x: x['date'])
     return render_template_string(TEMPLATE, events=events)
 
 if __name__ == '__main__':
